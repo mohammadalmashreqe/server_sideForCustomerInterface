@@ -1,37 +1,49 @@
 let express = require('express')
 let app = express();
 const TicketsList = new Array();
-TicketsList.push("A001");
+
 const ticketsnumber = "A00";
 let http = require('http');
 let server = http.Server(app);
 
 let socketIO = require('socket.io');
 let io = socketIO(server);
+/**
+* API to handel customet request 
+*
+*/
 
+app.get("/newTickets", (req, res) => {
+    try {
+        TicketsList.push(ticketsnumber + (TicketsList.length + 1));
+
+        io.emit("UpadteList", TicketsList);
+        //save tickits in Rabbit Message Queue 
+        produceTickitsToMQ(TicketsList[TicketsList.length - 1]);
+    }
+    catch (err) {
+        console.log(err);
+    }
+});
 /**
  *Port Number
  *
  */
 const port = process.env.PORT || 3000;
+
 /**
  *event fires when user connect 
  *
  */
+
 io.on('connection', (socket) => {
     try {
-    console.log('user connected');
-    io.emit("UpadteList", TicketsList);
-    socket.on('new-Tickets', () => {
+        console.log('user connected');
 
-        TicketsList.push(ticketsnumber + (TicketsList.length + 1));
-        //here i want to tell rabbit q about what happens .
+        io.emit("UpadteList", TicketsList);
 
-        updateTickitsList();
-    });
     }
-    catch(err)
-    {
+    catch (err) {
         console.log(err.message);
     }
 
@@ -43,30 +55,46 @@ io.on('connection', (socket) => {
  */
 server.listen(port, () => {
     try {
-    console.log(`started on port: ${port}`);
+        console.log(`started on port: ${port}`);
     }
-    catch(err)
-    {
+    catch (err) {
         console.log(err);
     }
 });
 
 
 
-
 /**
- *update tickets List and notify all connected user 
+ *produce Tickits To MQ
  *
  */
-function updateTickitsList() {
+function produceTickitsToMQ(TickitsNumberMQ) {
+    var q = 'Tickets';
+
+    var open = require('amqplib').connect('amqp://localhost');
+
+    // Publisher
+    open.then(function (conn) {
+        return conn.createChannel();
+    }).then(function (ch) {
+        return ch.assertQueue(q).then(function (ok) {
+            return ch.sendToQueue(q, Buffer.from(TickitsNumberMQ));
+        });
+    }).catch(console.warn);
+
+}
+
+
+/**
+ *Start up code to read daa from QM service 
+ *
+ */
+function LoadDataFromQM() {
     try {
-    //notify all about update 
-    io.emit("UpadteList", TicketsList);
-    //to do :
-    // sent to rabit  to store ticket in MQ
+
     }
-    catch (err)
-    {
+    catch (err) {
+
         console.log(err);
     }
 }
