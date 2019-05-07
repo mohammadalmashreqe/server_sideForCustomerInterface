@@ -5,6 +5,7 @@ const TicketsList = new Array();
 const ticketsnumber = "A00";
 let http = require('http');
 let server = http.Server(app);
+var amqp = require('amqplib/callback_api');
 
 let socketIO = require('socket.io');
 let io = socketIO(server);
@@ -15,11 +16,42 @@ let io = socketIO(server);
 
 app.get("/newTickets", (req, res) => {
     try {
-        TicketsList.push(ticketsnumber + (TicketsList.length + 1));
+
+
+
+        amqp.connect('amqp://localhost', function (error0, connection) {
+            if (error0) {
+                throw error0;
+            }
+            connection.createChannel(function (error1, channel) {
+                if (error1) {
+                    throw error1;
+                }
+                var exchange = 'Tickets';
+                var msg = ticketsnumber + (TicketsList.length + 1);
+
+                channel.assertExchange(exchange, 'fanout', {
+                    durable: false
+                });
+                channel.publish(exchange, 'Mqueue', Buffer.from(msg));
+                console.log(" [x] Sent %s", msg);
+            });
+
+            setTimeout(function () {
+                connection.close();
+                process.exit(0);
+            }, 500);
+        });
 
         io.emit("UpadteList", TicketsList);
-        //save tickits in Rabbit Message Queue 
-        produceTickitsToMQ(TicketsList[TicketsList.length - 1]);
+
+
+
+
+
+
+
+
     }
     catch (err) {
         console.log(err);
@@ -56,6 +88,45 @@ io.on('connection', (socket) => {
 server.listen(port, () => {
     try {
         console.log(`started on port: ${port}`);
+       
+        
+        amqp.connect('amqp://localhost', function(error0, connection) {
+            if (error0) {
+              throw error0;
+            }
+            connection.createChannel(function(error1, channel) {
+              if (error1) {
+                throw error1;
+              }
+              var exchange = 'Tickets';
+          
+              channel.assertExchange(exchange, 'fanout', {
+                durable: false
+              });
+          
+              channel.assertQueue('', {
+                exclusive: true
+              }, function(error2, q) {
+                if (error2) {
+                  throw error2;
+                }
+                console.log(" [*] Waiting for messages in %s. To exit press CTRL+C", q.queue);
+                channel.bindQueue(q.queue, exchange, '');
+             
+          
+                channel.consume(q.queue, function(msg) {
+                  if(msg.content) {
+                      console.log(" [x] %s", msg.content.toString());
+                      TicketsList.push(msg);
+                    }
+                }, {
+                  noAck: true
+                });
+              });
+            });
+          });
+
+
     }
     catch (err) {
         console.log(err);
@@ -64,37 +135,3 @@ server.listen(port, () => {
 
 
 
-/**
- *produce Tickits To MQ
- *
- */
-function produceTickitsToMQ(TickitsNumberMQ) {
-    var q = 'Tickets';
-
-    var open = require('amqplib').connect('amqp://localhost');
-
-    // Publisher
-    open.then(function (conn) {
-        return conn.createChannel();
-    }).then(function (ch) {
-        return ch.assertQueue(q).then(function (ok) {
-            return ch.sendToQueue(q, Buffer.from(TickitsNumberMQ));
-        });
-    }).catch(console.warn);
-
-}
-
-
-/**
- *Start up code to read daa from QM service 
- *
- */
-function LoadDataFromQM() {
-    try {
-
-    }
-    catch (err) {
-
-        console.log(err);
-    }
-}
