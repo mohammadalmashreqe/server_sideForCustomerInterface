@@ -35,15 +35,14 @@ app.get("/newTickets", (req, res) => {
                 });
                 channel.publish(exchange, 'Mqueue', Buffer.from(msg));
                 console.log(" [x] Sent %s", msg);
+                TicketsList.push(msg);
+                io.emit("UpadteList", TicketsList);
             });
 
-            setTimeout(function () {
-                connection.close();
-                process.exit(0);
-            }, 500);
+          
         });
 
-        io.emit("UpadteList", TicketsList);
+        
 
 
 
@@ -116,8 +115,8 @@ server.listen(port, () => {
           
                 channel.consume(q.queue, function(msg) {
                   if(msg.content) {
-                      console.log(" [x] %s", msg.content.toString());
-                      TicketsList.push(msg);
+                      console.log(" [x] raje3 %s", msg.content.toString());
+                     
                     }
                 }, {
                   noAck: true
