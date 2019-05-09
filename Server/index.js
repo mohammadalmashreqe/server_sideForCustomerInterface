@@ -9,6 +9,15 @@ var amqp = require('amqplib/callback_api');
 
 let socketIO = require('socket.io');
 let io = socketIO(server);
+
+var connection;
+
+var conn = require('amqplib/callback_api');
+conn.connect('amqp://localhost', function (err, conn) {
+    if (err != null) bail(err);
+    connection = conn;
+    consumer(conn);
+});
 /**
 * API to handel customet request 
 *
@@ -16,40 +25,12 @@ let io = socketIO(server);
 
 app.get("/newTickets", (req, res) => {
     try {
-
-
-
-        amqp.connect('amqp://localhost', function (error0, connection) {
-            if (error0) {
-                throw error0;
-            }
-            connection.createChannel(function (error1, channel) {
-                if (error1) {
-                    throw error1;
-                }
-                var exchange = 'Tickets';
-                var msg = ticketsnumber + (TicketsList.length + 1);
-
-                channel.assertExchange(exchange, 'fanout', {
-                    durable: false
-                });
-                channel.publish(exchange, 'Mqueue', Buffer.from(msg));
-                console.log(" [x] Sent %s", msg);
-                TicketsList.push(msg);
-                io.emit("UpadteList", TicketsList);
-            });
-
-          
-        });
-
-        
-
-
-
-
-
-
-
+        TicketsList.push(ticketsnumber + (TicketsList.length + 1));
+        if (connection) {
+            publisher(connection);
+        }
+        else
+            console.log("error no conn");
 
     }
     catch (err) {
@@ -87,50 +68,51 @@ io.on('connection', (socket) => {
 server.listen(port, () => {
     try {
         console.log(`started on port: ${port}`);
-       
-        
-        amqp.connect('amqp://localhost', function(error0, connection) {
-            if (error0) {
-              throw error0;
-            }
-            connection.createChannel(function(error1, channel) {
-              if (error1) {
-                throw error1;
-              }
-              var exchange = 'Tickets';
-          
-              channel.assertExchange(exchange, 'fanout', {
-                durable: false
-              });
-          
-              channel.assertQueue('', {
-                exclusive: true
-              }, function(error2, q) {
-                if (error2) {
-                  throw error2;
-                }
-                console.log(" [*] Waiting for messages in %s. To exit press CTRL+C", q.queue);
-                channel.bindQueue(q.queue, exchange, '');
-             
-          
-                channel.consume(q.queue, function(msg) {
-                  if(msg.content) {
-                      console.log(" [x] raje3 %s", msg.content.toString());
-                     
-                    }
-                }, {
-                  noAck: true
-                });
-              });
-            });
-          });
-
-
     }
     catch (err) {
         console.log(err);
     }
 });
 
+function bail(err) {
+    console.error(err);
+    process.exit(1);
+}
+
+// Publisher
+function publisher(conn) {
+    try {
+        conn.createChannel(on_open);
+        function on_open(err, ch) {
+            if (err != null) bail(err);
+            ch.assertQueue(q);
+            ch.sendToQueue(q, Buffer.from(JSON.stringify(TicketsList)));
+            console.log("raye7 ")
+        }
+    } catch (err) {
+        console.log(err);
+    }
+
+}
+var q = 'tasks';
+
+// Consumer
+function consumer(conn) {
+    var ok = conn.createChannel(on_open);
+    function on_open(err, ch) {
+        if (err != null) bail(err);
+        ch.assertQueue(q);
+        ch.consume(q, function (pTicketsList) {
+            console.log("Consume ^^")
+            if (pTicketsList !== null) {
+                console.log(pTicketsList.content.toString('utf8'));
+                ch.ack(pTicketsList);
+                TicketsList = JSON.parse(pTicketsList.content.toString('utf8'));   
+                            io.emit("onListUpdate", pTicketsList);
+
+            }
+        });
+    }
+}
 
 
